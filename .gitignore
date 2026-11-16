@@ -1,0 +1,8 @@
+# Godot 4 per-project import cache (regenerated on open)
+.godot/
+
+# Export outputs
+builds/
+*.apk
+*.x86_64
+*.exe
