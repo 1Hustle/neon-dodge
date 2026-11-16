@@ -2,89 +2,74 @@
 
 ## Engine
 
-- **Godot 4.3.stable.official** (build 77dcf97d8), Linux x86_64 editor binary.
-- Downloaded from the official Godot GitHub releases:
-  `Godot_v4.3-stable_linux.x86_64.zip` (release `4.3-stable`).
-- Binary kept outside the project at `~/workspace/tools/godot/Godot_v4.3-stable_linux.x86_64`.
-- Verified with: `Godot_v4.3-stable_linux.x86_64 --version`
-  → `4.3.stable.official.77dcf97d8`
+- **Godot 4.3.stable.official** (build 77dcf97d8), Linux x86_64 editor binary, from the official Godot GitHub releases (`4.3-stable`).
+- Verified with `--version` → `4.3.stable.official.77dcf97d8`.
 
-## Project layout
+## History
 
-| File | Role |
-| --- | --- |
-| `project.godot` | 720×1280 portrait, GL Compatibility, custom `move_*` input actions (WASD + arrows), physics layers 2=player / 3=enemy, dark clear colour |
-| `main.tscn` / `main.gd` | Game controller: state, score, lives (3), enemy spawn Timer, difficulty ramp, game over + restart |
-| `player.tscn` / `player.gd` | Player ship (Area2D, cyan Polygon2D): keyboard via `Input.get_vector`, touch-drag steering, viewport clamping |
-| `enemy.tscn` / `enemy.gd` | Falling hazard (Area2D, magenta diamond): falls at a Main-set speed, `area_entered` → `hit_player`, off-screen → `escaped`, frees itself either way |
-| `hud.tscn` / `hud.gd` | CanvasLayer: Score label, Lives label, centred start / game-over panel with button (signal-driven) |
-| `tests/sim_test.gd` | Headless simulation test (developer tool, not part of the game) |
+- **v1 (2026-11-16):** single enemy type, direct-velocity movement, no pause, no persistence. Verified headless: import clean, 600-frame run clean, simulation 8/8. Published to this repository as the first 12 commits.
+- **v2 (2026-11-16):** the restructure and feature pass documented below. v1's gameplay checks were carried into the new suite and extended, not replaced.
 
-All visuals are coloured `Polygon2D` shapes — no external assets.
+## What changed in v2
 
-## Verification (all run headless on 2026-11-16)
+### Structure
+- Scenes moved to `scenes/` (enemies in `scenes/enemies/`), scripts to `scripts/` (enemies in `scripts/enemies/`). All `res://` references, the main-scene path in `project.godot`, and every `preload` were updated. The project imports and runs clean after the move (see Verification).
 
-Binary below is abbreviated as `godot`; all commands run from the project root.
+### Gameplay
+- **Enemy types:** the single v1 enemy script became `scripts/enemies/enemy_base.gd` (signals, despawn, physics setup) with three subclasses that override only `_move()`: Drifter (straight fall + spin), Weaver (sine sway around its spawn x), Diver (ENTER → LOCK → DIVE state machine that aims at the player's position when the dive begins — a fixed target, not homing).
+- **Spawn mix:** Main picks the type per spawn by survival time: <8s all Drifter; 8–20s Weaver 35%; ≥20s Diver 25% / Weaver 30% / Drifter 45%.
+- **Damage:** a hit costs one life and starts a 1.5s invulnerability window on the player (blinking). Main ignores `hit_player` while the window runs, fixing the class of bug where one overlap fires across several physics frames and drains multiple lives.
+- **High score:** on game over, a beaten record is written with `ConfigFile` to `user://neon_dodge.cfg` and loaded again at startup; the menu and game-over screens display it.
+- **Pause:** Esc/P or the HUD pause button toggles `get_tree().paused` through a single `_set_paused()` in Main. Main and the HUD run with process mode *Always* (so they can unpause and take button presses); the Player, enemies and SpawnTimer are explicitly *Pausable*. The pause menu offers Resume / Restart / Main Menu.
+- **Movement:** the player now integrates a velocity that accelerates toward the input's desired velocity at 2800 px/s² (same rate for braking), instead of teleporting to full speed. Touch-drag steering is unchanged in behaviour and shares the same velocity path.
 
-### 1. Project import / script parse check
+## Verification (2026-11-16)
 
+### 1. Import / script parse — headless
 ```
 godot --headless --editor --quit --path .
 ```
+Exit 0, zero errors, zero warnings.
 
-Result: **exit 0, zero errors, zero warnings.** This parses every
-GDScript file and imports every scene; any parse error would print here.
-
-### 2. Main scene runtime check (start screen idle)
-
+### 2. Main scene idle run — headless
 ```
 godot --headless --path . --quit-after 600
 ```
+Exit 0, zero errors across 600 frames.
 
-Result: **exit 0, zero errors, zero warnings** across 600 frames.
-
-### 3. Gameplay simulation test
-
-The start-screen run above cannot exercise gameplay (nobody presses
-Start), so a SceneTree script drives the real game code directly —
-starting runs, forcing spawns, and flying the player into enemies:
-
+### 3. Simulation suite — headless
 ```
 godot --headless --path . --script res://tests/sim_test.gd
 ```
+**SIM RESULT: ALL PASS — 17/17:**
+1. run starts (playing state)
+2. run starts with 3 lives
+3. spawn creates exactly one enemy
+4. enemy collision costs exactly one life
+5. second contact during invulnerability costs no life
+6. enemy leaving screen emits escaped (dodge)
+7. player is clamped to the viewport
+8. spawn interval ramps down (wait_time=0.380 at t=60s)
+9. game over records a new high score
+10. high score persists to disk (user://neon_dodge.cfg)
+11. pause engages and shows the pause menu
+12. enemies do not move while paused
+13. resume unpauses the game
+14. weaver falls and sways on a sine wave
+15. diver locks on and enters its dive state
+16. player accelerates smoothly instead of snapping to full speed (vx=135.1 shortly after input)
+17. losing the last life ends the run
 
-Result: **SIM RESULT: ALL PASS** — 8/8 checks:
+The suite deletes any pre-existing save file before it starts, so the persistence checks are deterministic. A 90-second watchdog fails the run rather than hanging if a check stalls.
 
-1. Run starts (playing state)
-2. Run starts with 3 lives
-3. Spawn creates exactly one enemy
-4. Enemy collision costs exactly one life
-5. Enemy leaving the screen emits `escaped` (dodge path)
-6. Player is clamped to the viewport
-7. Spawn interval ramps down with survival time (wait_time 1.1s → 0.380s at t=60s)
-8. Losing the last life ends the run
+### 4. Rendered run — virtual display (NOT headless)
+```
+xvfb-run godot --display-driver x11 --rendering-driver opengl3 --path . --script res://tests/capture_test.gd
+```
+The game ran with real rendering under Xvfb and saved four screenshots: menu (showing the persisted "Best: 500" from the simulation run — cross-run persistence visible on screen), live gameplay (score ticking, enemies falling, player ship offset by scripted input, pause button visible), the pause menu, and the game-over screen. All four captures reported OK and were visually inspected.
 
-Note: the first simulation run failed checks 6 and 8 — both were bugs
-in the *test script* (it re-applied its own inputs every frame,
-overwriting the game state it was trying to observe), not in the game.
-The test was fixed to apply each input exactly once; the game code was
-not changed.
+## What this verification does NOT prove
 
-## Remaining warnings
-
-None. All three verification runs produced no errors and no warnings.
-
-## What headless verification cannot prove
-
-- **Real touch input** on a phone (finger down / drag / release). The
-  touch code path uses `InputEventScreenTouch` / `InputEventScreenDrag`
-  and is identical to the mouse path when "emulate touch from mouse" is
-  on (it is, in `project.godot`), but no physical touch device was
-  involved in these tests.
-- **Actual keyboard feel** — the `move_*` actions are defined and the
-  player code reads them via `Input.get_vector`, but no physical key
-  presses were sent during headless runs.
-- **Rendering appearance** — headless runs do not draw; polygon shapes,
-  colours and HUD layout are as authored in the `.tscn` files but were
-  not visually inspected.
-- **On-device performance** on the target phone.
+- **Physical-device behaviour.** No Android device has run this build. Touch input is exercised only through the mouse-emulation path (enabled in project settings) and logic checks.
+- **Audio.** There is no audio in the game yet.
+- **Performance on hardware.** Headless and virtual-display runs say nothing about frame rates on a phone GPU.
