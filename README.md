@@ -4,7 +4,7 @@ A 2D arcade survival game built with **Godot 4.3** and **GDScript**. Pilot a shi
 
 ## Development and AI assistance
 
-This project was developed by **Opeyemi Peter Adeshina** with AI assistance (code generation, testing harnesses and documentation support). The design decisions, project structure and verification process are documented in this repository, including the automated test suite in `tests/` and the build notes in `BUILD_NOTES.md`. Nothing in this README describes a feature that is not implemented in the code.
+This project is developed by **Opeyemi Peter Adeshina** with AI assistance. Stated plainly: **the first version of this game was written by an AI coding assistant** at his direction — he specified the game, reviewed the test evidence, and directed the fixes and features in later versions, which were also produced with AI assistance. He is learning GDScript through this project and does not present the AI-written code as hand-written. The design decisions, project structure and verification process are documented in this repository, including the automated test suite in `tests/` and the build notes in `BUILD_NOTES.md`. Nothing in this README describes a feature that is not implemented in the code.
 
 ## Features
 
